@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AGE_RANGES, COUNTRIES, SEX_OPTIONS } from "@/lib/dataset";
@@ -11,20 +11,25 @@ import { track } from "@/lib/analytics";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const existing = loadSession();
 
-  const [ageRange, setAgeRange] = useState<AgeRange>(
-    existing?.profile.ageRange ?? "25-34"
-  );
-  const [sex, setSex] = useState(existing?.profile.sex ?? "prefer-not-to-say");
-  const [heightCm, setHeightCm] = useState(existing?.profile.heightCm ?? 170);
-  const [weightKg, setWeightKg] = useState<number | "">(existing?.profile.weightKg ?? "");
-  const [country, setCountry] = useState<Country>(
-    existing?.profile.country ?? "Global"
-  );
-  const [heightInput, setHeightInput] = useState(
-    String(existing?.profile.heightCm ?? 170)
-  );
+  const [ageRange, setAgeRange] = useState<AgeRange>("25-34");
+  const [sex, setSex] = useState("prefer-not-to-say");
+  const [heightCm, setHeightCm] = useState(170);
+  const [weightKg, setWeightKg] = useState<number | "">("");
+  const [country, setCountry] = useState<Country>("Global");
+  const [heightInput, setHeightInput] = useState("170");
+
+  // Load saved profile after mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    const existing = loadSession();
+    if (!existing) return;
+    setAgeRange(existing.profile.ageRange);
+    setSex(existing.profile.sex);
+    setHeightCm(existing.profile.heightCm);
+    setWeightKg(existing.profile.weightKg ?? "");
+    setCountry(existing.profile.country);
+    setHeightInput(String(existing.profile.heightCm));
+  }, []);
 
   function handleHeightChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;

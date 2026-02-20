@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { loadSession, saveSession } from "@/lib/storage";
+import type { StoredSession } from "@/lib/storage";
 import { track } from "@/lib/analytics";
 import type { Measurements } from "@/lib/measurements";
 import {
@@ -27,7 +28,7 @@ type Step = "mode-select" | "scanning" | "manual";
 
 export default function ScanPage() {
   const router = useRouter();
-  const [session] = useState(() => loadSession());
+  const [session, setSession] = useState<StoredSession | null>(null);
   const [step, setStep] = useState<Step>("mode-select");
   const [selectedMode, setSelectedMode] = useState<ScanMode>("full-body");
   const [manualMeasurements, setManualMeasurements] = useState({
@@ -39,11 +40,14 @@ export default function ScanPage() {
   });
 
   useEffect(() => {
-    if (!session?.profile?.heightCm) {
+    const s = loadSession();
+    if (!s?.profile?.heightCm) {
       router.replace("/profile");
+      return;
     }
+    setSession(s);
     track("scan_started");
-  }, [session, router]);
+  }, [router]);
 
   function handleCapture(measurements: Measurements) {
     if (!session) return;
