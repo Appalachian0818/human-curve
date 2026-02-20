@@ -1,4 +1,4 @@
-export type ScanMode = "face" | "upper-body" | "full-body" | "chest";
+export type ScanMode = "face" | "upper-body" | "full-body" | "chest" | "waist";
 /** Internal camera modes used only for two-pose chest capture routing */
 export type CameraMode = ScanMode | "chest-front" | "chest-side";
 
@@ -39,6 +39,20 @@ export const SCAN_MODE_OPTIONS: ScanModeOption[] = [
       "Arms relaxed at sides",
     ],
     autoCapture: false,
+    requiredGoodFrames: 25,
+  },
+  {
+    id: "waist",
+    label: "Waist",
+    emoji: "📏",
+    tagline: "Waist circumference — two quick poses",
+    details: [
+      "Stand ~1 m from the camera",
+      "Pose 1: face forward, arms slightly out from sides",
+      "Pose 2: turn 90° to your side",
+      "Each pose auto-captures in 3 seconds",
+    ],
+    autoCapture: true,
     requiredGoodFrames: 25,
   },
   {

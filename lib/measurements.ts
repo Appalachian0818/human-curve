@@ -64,6 +64,8 @@ export interface Measurements {
   face?: FaceMeasurements;
   /** Populated only in Chest mode */
   chestCircumferenceCm?: number;
+  /** Populated only in Waist mode */
+  waistCircumferenceCm?: number;
   /** Which scan mode produced this result */
   scanMode?: ScanMode;
 }
@@ -469,6 +471,20 @@ export function computeChestCircumference(
       Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h))) * 10
     ) / 10
   );
+}
+
+/**
+ * Waist circumference using Ramanujan ellipse approximation.
+ * frontHipWidthCm: hip-to-hip distance from front pose (waist ≈ 88% of hip width)
+ * sideDepthCm: hip depth from side pose
+ */
+export function computeWaistCircumference(
+  frontHipWidthCm: number,
+  sideDepthCm: number
+): number {
+  const semiWidth = (frontHipWidthCm * 0.88) / 2;
+  const semiDepth = sideDepthCm / 2;
+  return computeChestCircumference(semiWidth, semiDepth);
 }
 
 // Keep the old export for backwards compat
