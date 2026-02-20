@@ -13,7 +13,7 @@
  * 31: left_foot_index, 32: right_foot_index
  */
 
-import type { ScanMode } from "./scanMode";
+import type { ScanMode, CameraMode } from "./scanMode";
 
 export interface Landmark {
   x: number; // normalized 0–1
@@ -62,6 +62,8 @@ export interface Measurements {
   scaleFactor: number;
   /** Populated only in Face mode */
   face?: FaceMeasurements;
+  /** Populated only in Chest mode */
+  chestCircumferenceCm?: number;
   /** Which scan mode produced this result */
   scanMode?: ScanMode;
 }
@@ -97,14 +99,15 @@ export function checkLandmarkQualityForMode(
   landmarks: Landmark[],
   frameWidth: number,
   frameHeight: number,
-  mode: ScanMode
+  mode: CameraMode
 ): { valid: boolean; reason: string } {
   if (!landmarks || landmarks.length < 33) {
     return { valid: false, reason: "Body not detected" };
   }
 
   if (mode === "face") return checkFaceQuality(landmarks);
-  if (mode === "upper-body") return checkUpperBodyQuality(landmarks);
+  if (mode === "upper-body" || mode === "chest-front") return checkUpperBodyQuality(landmarks);
+  if (mode === "chest-side") return checkSideProfileQuality(landmarks);
   return checkFullBodyQuality(landmarks);
 }
 
@@ -154,6 +157,43 @@ function checkUpperBodyQuality(landmarks: Landmark[]): { valid: boolean; reason:
   if (torsoFraction < 0.22) return { valid: false, reason: "Move closer to the camera" };
 
   return { valid: true, reason: "Good framing — hold still" };
+}
+
+function checkSideProfileQuality(landmarks: Landmark[]): { valid: boolean; reason: string } {
+  for (const idx of UPPER_BODY_LANDMARKS) {
+    const lm = landmarks[idx];
+    if (!lm || !isVisible(lm)) {
+      return { valid: false, reason: "Upper body not fully visible" };
+    }
+  }
+
+  const nose = landmarks[0];
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  const leftHip = landmarks[23];
+  const rightHip = landmarks[24];
+  const margin = 0.05;
+
+  if (Math.min(leftShoulder.y, rightShoulder.y) < margin) {
+    return { valid: false, reason: "Move back — shoulders cut off" };
+  }
+  if (Math.max(leftHip.y, rightHip.y) > 1 - margin) {
+    return { valid: false, reason: "Move back — hips cut off" };
+  }
+
+  // In side profile, the nose deviates from the shoulder midpoint in X
+  const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
+  const noseDeviation = Math.abs(nose.x - shoulderMidX);
+  if (noseDeviation < 0.08) {
+    return { valid: false, reason: "Turn sideways — show your profile" };
+  }
+
+  // Both shoulders must still be marginally detectable (not completely edge-on)
+  if (Math.abs(leftShoulder.x - rightShoulder.x) < 0.02) {
+    return { valid: false, reason: "Rotate slightly so both shoulders are detected" };
+  }
+
+  return { valid: true, reason: "Good profile — hold still" };
 }
 
 function checkFullBodyQuality(landmarks: Landmark[]): { valid: boolean; reason: string } {
@@ -407,6 +447,28 @@ export function averageFaceMeasurements(frames: FaceMeasurements[]): FaceMeasure
     interocularRatio: Math.round((sum.interocularRatio / n) * 1000) / 1000,
     facialWidthRatio: Math.round((sum.facialWidthRatio / n) * 1000) / 1000,
   };
+}
+
+// ── Chest circumference ───────────────────────────────────────────────────────
+
+/**
+ * Ramanujan's approximation for ellipse circumference.
+ * semiWidthCm = half the front-facing chest width
+ * semiDepthCm = half the side-facing chest depth
+ */
+export function computeChestCircumference(
+  semiWidthCm: number,
+  semiDepthCm: number
+): number {
+  if (semiWidthCm <= 0 || semiDepthCm <= 0) return 0;
+  const a = semiWidthCm;
+  const b = semiDepthCm;
+  const h = ((a - b) ** 2) / ((a + b) ** 2);
+  return (
+    Math.round(
+      Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h))) * 10
+    ) / 10
+  );
 }
 
 // Keep the old export for backwards compat

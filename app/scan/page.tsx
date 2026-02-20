@@ -7,11 +7,13 @@ import dynamic from "next/dynamic";
 import { loadSession, saveSession } from "@/lib/storage";
 import type { StoredSession } from "@/lib/storage";
 import { track } from "@/lib/analytics";
+import { computeChestCircumference } from "@/lib/measurements";
 import type { Measurements } from "@/lib/measurements";
 import {
   SCAN_MODE_OPTIONS,
   type ScanMode,
   type ScanModeOption,
+  type CameraMode,
 } from "@/lib/scanMode";
 
 const CameraView = dynamic(() => import("@/components/CameraView"), {
@@ -24,13 +26,15 @@ const CameraView = dynamic(() => import("@/components/CameraView"), {
   ),
 });
 
-type Step = "mode-select" | "scanning" | "manual";
+type Step = "mode-select" | "scanning" | "chest-transition" | "manual";
 
 export default function ScanPage() {
   const router = useRouter();
   const [session, setSession] = useState<StoredSession | null>(null);
   const [step, setStep] = useState<Step>("mode-select");
   const [selectedMode, setSelectedMode] = useState<ScanMode>("full-body");
+  const [chestPose, setChestPose] = useState<"front" | "side">("front");
+  const [frontMeasurements, setFrontMeasurements] = useState<Measurements | null>(null);
   const [manualMeasurements, setManualMeasurements] = useState({
     shoulderWidthCm: "",
     hipWidthCm: "",
@@ -58,6 +62,32 @@ export default function ScanPage() {
       scanMode: selectedMode,
     });
     track("scan_captured", { mode: selectedMode });
+    router.push("/results");
+  }
+
+  function handleChestFrontCapture(measurements: Measurements) {
+    setFrontMeasurements(measurements);
+    setStep("chest-transition");
+  }
+
+  function handleChestSideCapture(measurements: Measurements) {
+    if (!session || !frontMeasurements) return;
+    // Chest width ≈ 85% of shoulder width (deltoids protrude beyond chest line)
+    const halfWidth = (frontMeasurements.shoulderWidthCm * 0.85) / 2;
+    const halfDepth = measurements.shoulderWidthCm / 2;
+    const chestCircumferenceCm = computeChestCircumference(halfWidth, halfDepth);
+    const finalMeasurements: Measurements = {
+      ...frontMeasurements,
+      chestCircumferenceCm,
+      scanMode: "chest",
+    };
+    saveSession({
+      ...session,
+      measurements: finalMeasurements,
+      capturedAt: new Date().toISOString(),
+      scanMode: "chest",
+    });
+    track("scan_captured", { mode: "chest" });
     router.push("/results");
   }
 
@@ -219,8 +249,62 @@ export default function ScanPage() {
     );
   }
 
+  // ── Step: Chest transition (between pose 1 and pose 2) ──────────────────
+  if (step === "chest-transition") {
+    return (
+      <main className="min-h-screen bg-slate-900 flex flex-col">
+        <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-800">
+          <button
+            onClick={() => setStep("mode-select")}
+            className="text-slate-400 hover:text-white transition-colors text-sm"
+          >
+            ← Cancel
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-white font-bold">Pose 2 of 2</h1>
+          </div>
+          <div className="w-16" />
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8 text-center">
+          <div className="text-7xl">✅</div>
+          <div>
+            <h2 className="text-white text-2xl font-bold mb-2">Pose 1 complete!</h2>
+            <p className="text-slate-400">Now turn 90° to show your side profile</p>
+          </div>
+          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 text-left max-w-sm w-full">
+            <p className="text-slate-300 text-sm font-medium mb-3">For the side profile:</p>
+            <ul className="space-y-2">
+              {[
+                "Turn 90° — one shoulder faces the camera",
+                "Stand straight, arms relaxed at sides",
+                "Auto-captures in 3 seconds once detected",
+              ].map((tip) => (
+                <li key={tip} className="flex gap-2 text-slate-400 text-sm">
+                  <span className="text-teal-500 mt-px">·</span>
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <button
+            onClick={() => { setChestPose("side"); setStep("scanning"); }}
+            className="w-full max-w-sm py-4 rounded-2xl font-bold text-lg bg-teal-500 hover:bg-teal-400 text-white transition-all shadow-lg shadow-teal-500/20 active:scale-95"
+          >
+            Ready — Start Pose 2 →
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   // ── Step: Scanning ───────────────────────────────────────────────────────
   if (step === "scanning") {
+    const isChest = selectedMode === "chest";
+    const cameraMode: CameraMode = isChest
+      ? (chestPose === "front" ? "chest-front" : "chest-side")
+      : selectedMode;
+
     return (
       <main className="min-h-screen bg-slate-900 flex flex-col">
         <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-800">
@@ -233,14 +317,30 @@ export default function ScanPage() {
           <div className="flex-1 text-center">
             <h1 className="text-white font-bold">
               {modeOption.emoji} {modeOption.label} Scan
+              {isChest && (
+                <span className="ml-2 text-teal-400 text-sm font-normal">
+                  ({chestPose === "front" ? "1" : "2"}/2)
+                </span>
+              )}
             </h1>
           </div>
           <div className="w-24" />
         </div>
 
         <div className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full">
-          {/* Height reminder — not shown for face mode */}
-          {selectedMode !== "face" && (
+          {/* Chest pose banner */}
+          {isChest && (
+            <div className="flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3 mb-4">
+              <span className="text-violet-300 text-sm">
+                {chestPose === "front"
+                  ? "📸 Pose 1 of 2 — face the camera directly"
+                  : "📸 Pose 2 of 2 — turn 90° to your side"}
+              </span>
+            </div>
+          )}
+
+          {/* Height reminder — not shown for face or chest modes */}
+          {selectedMode !== "face" && !isChest && (
             <div className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/20 rounded-xl px-4 py-3 mb-4">
               <span className="text-teal-400 text-sm">
                 📏 Scaling to your height: <strong>{session.profile.heightCm} cm</strong>
@@ -249,10 +349,17 @@ export default function ScanPage() {
           )}
 
           <CameraView
-            mode={selectedMode}
+            key={isChest ? `chest-${chestPose}` : selectedMode}
+            mode={cameraMode}
             requiredGoodFrames={modeOption.requiredGoodFrames}
             userHeightCm={session.profile.heightCm}
-            onCapture={handleCapture}
+            onCapture={
+              isChest
+                ? chestPose === "front"
+                  ? handleChestFrontCapture
+                  : handleChestSideCapture
+                : handleCapture
+            }
           />
         </div>
       </main>

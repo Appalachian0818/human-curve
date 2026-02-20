@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { loadSession, eraseAllData } from "@/lib/storage";
-import { getStats, getFaceStats, COUNTRIES } from "@/lib/dataset";
+import { getStats, getFaceStats, getChestStats, COUNTRIES } from "@/lib/dataset";
 import type { Country, Sex } from "@/lib/dataset";
 import { computeBadges } from "@/lib/badges";
 import { track } from "@/lib/analytics";
@@ -57,9 +57,11 @@ export default function ResultsPage() {
   const sex = (profile.sex === "prefer-not-to-say" ? "other" : profile.sex) as Sex;
   const stats = getStats(selectedCountry, sex, profile.ageRange);
   const faceStats = getFaceStats(sex);
+  const chestStats = getChestStats(sex, selectedCountry);
   const isFaceMode = scanMode === "face";
   const isUpperBody = scanMode === "upper-body";
-  const badges = isFaceMode ? [] : computeBadges(measurements);
+  const isChestMode = scanMode === "chest";
+  const badges = isFaceMode || isChestMode ? [] : computeBadges(measurements);
 
   // ── Metric sets by mode ──────────────────────────────────────────────────
   const bodyMetrics = [
@@ -104,6 +106,7 @@ export default function ResultsPage() {
   const modeLabelMap: Record<string, string> = {
     face: "😊 Face",
     "upper-body": "🙆 Upper Body",
+    chest: "📐 Chest",
     "full-body": "🧍 Full Body",
   };
 
@@ -141,8 +144,74 @@ export default function ResultsPage() {
           lighting, and distance. Not medical advice.
         </div>
 
-        {/* ── FACE MODE results ─────────────────────────────────────────── */}
-        {isFaceMode && measurements.face ? (
+        {/* ── CHEST MODE results ────────────────────────────────────────── */}
+        {isChestMode && measurements.chestCircumferenceCm ? (
+          <>
+            {/* Summary card */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-2xl p-5 border border-slate-700">
+              <p className="text-slate-400 text-xs mb-3">Chest Circumference</p>
+              <div className="flex items-end gap-2 mb-1">
+                <p className="text-5xl font-black text-white">
+                  {measurements.chestCircumferenceCm}
+                </p>
+                <p className="text-slate-400 pb-1 text-lg">cm</p>
+              </div>
+              <p className="text-teal-400 text-sm font-semibold">
+                {ordinalSuffix(computePercentile(
+                  measurements.chestCircumferenceCm,
+                  chestStats.chestCircumferenceCm.mean,
+                  chestStats.chestCircumferenceCm.stddev
+                ))} percentile vs {selectedCountry}
+              </p>
+            </div>
+
+            {/* Country selector */}
+            <div>
+              <label className="block text-slate-300 text-sm font-semibold mb-2">
+                Compare against country
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {COUNTRIES.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => handleCountryChange(c)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                      selectedCountry === c
+                        ? "bg-teal-500/20 border-teal-500 text-teal-300"
+                        : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Distribution chart */}
+            <div>
+              <h2 className="text-slate-300 text-sm font-semibold uppercase tracking-widest mb-3">
+                Distribution
+              </h2>
+              <MetricChart
+                label="Chest Circumference"
+                unit="cm"
+                value={measurements.chestCircumferenceCm}
+                stats={chestStats.chestCircumferenceCm}
+              />
+            </div>
+
+            <div className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/40 text-slate-400 text-sm leading-relaxed">
+              <p className="font-medium text-slate-300 mb-1">About this measurement</p>
+              <p>
+                Chest circumference is estimated from two poses using an ellipse
+                approximation (Ramanujan&apos;s formula). Front-pose shoulder width
+                provides the semi-axis for width; side-profile shoulder depth provides
+                the semi-axis for depth. Accuracy depends heavily on camera angle
+                and pose consistency.
+              </p>
+            </div>
+          </>
+        ) : isFaceMode && measurements.face ? (
           <>
             <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-2xl p-5 border border-slate-700">
               <p className="text-slate-400 text-xs mb-3">Face Proportions</p>
@@ -309,7 +378,7 @@ export default function ResultsPage() {
         )}
 
         {/* Share card */}
-        {!isFaceMode && (
+        {!isFaceMode && !isChestMode && (
           <div>
             <h2 className="text-slate-300 text-sm font-semibold uppercase tracking-widest mb-3">
               Share

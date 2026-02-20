@@ -210,6 +210,44 @@ export function getFaceStats(sex: Sex): FaceStats {
   return FACE_BASE_OTHER;
 }
 
+// ── Chest circumference stats (SAMPLE — synthetic reference values) ───────────
+export interface ChestStats {
+  chestCircumferenceCm: MetricStats;
+}
+
+// Values in cm — approximate population means by sex and country
+const CHEST_STATS: Record<Sex, Record<Country, MetricStats>> = {
+  male: {
+    Global:        { mean: 98,  stddev: 9 },
+    USA:           { mean: 103, stddev: 10 },
+    "South Korea": { mean: 93,  stddev: 8 },
+    Japan:         { mean: 92,  stddev: 8 },
+    Germany:       { mean: 100, stddev: 9 },
+    Brazil:        { mean: 97,  stddev: 9 },
+  },
+  female: {
+    Global:        { mean: 90, stddev: 9 },
+    USA:           { mean: 96, stddev: 10 },
+    "South Korea": { mean: 84, stddev: 8 },
+    Japan:         { mean: 83, stddev: 8 },
+    Germany:       { mean: 92, stddev: 9 },
+    Brazil:        { mean: 91, stddev: 9 },
+  },
+  other: {
+    Global:        { mean: 94, stddev: 9 },
+    USA:           { mean: 99, stddev: 10 },
+    "South Korea": { mean: 88, stddev: 8 },
+    Japan:         { mean: 87, stddev: 8 },
+    Germany:       { mean: 96, stddev: 9 },
+    Brazil:        { mean: 93, stddev: 9 },
+  },
+};
+
+export function getChestStats(sex: Sex, country: Country = "Global"): ChestStats {
+  const bySex = CHEST_STATS[sex] ?? CHEST_STATS.other;
+  return { chestCircumferenceCm: bySex[country] ?? bySex["Global"] };
+}
+
 export const COUNTRIES: Country[] = [
   "Global",
   "USA",

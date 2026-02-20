@@ -1,4 +1,6 @@
-export type ScanMode = "face" | "upper-body" | "full-body";
+export type ScanMode = "face" | "upper-body" | "full-body" | "chest";
+/** Internal camera modes used only for two-pose chest capture routing */
+export type CameraMode = ScanMode | "chest-front" | "chest-side";
 
 export interface ScanModeOption {
   id: ScanMode;
@@ -37,6 +39,20 @@ export const SCAN_MODE_OPTIONS: ScanModeOption[] = [
       "Arms relaxed at sides",
     ],
     autoCapture: false,
+    requiredGoodFrames: 25,
+  },
+  {
+    id: "chest",
+    label: "Chest",
+    emoji: "📐",
+    tagline: "Chest circumference — two quick poses",
+    details: [
+      "Stand ~1 m from the camera",
+      "Pose 1: face the camera directly",
+      "Pose 2: turn 90° to your side",
+      "Each pose auto-captures in 3 seconds",
+    ],
+    autoCapture: true,
     requiredGoodFrames: 25,
   },
   {

@@ -17,14 +17,14 @@ import {
 } from "@/lib/measurements";
 import type { PoseLandmarkerInstance } from "@/lib/pose";
 import { processFrame } from "@/lib/pose";
-import type { ScanMode } from "@/lib/scanMode";
+import type { CameraMode } from "@/lib/scanMode";
 
 const MAX_BUFFER = 60;
 // Countdown duration in seconds for full-body auto-capture
 const AUTO_CAPTURE_COUNTDOWN = 3;
 
 interface CameraViewProps {
-  mode: ScanMode;
+  mode: CameraMode;
   requiredGoodFrames: number;
   userHeightCm: number;
   onCapture: (measurements: Measurements) => void;
@@ -59,7 +59,7 @@ export default function CameraView({
   // Stable ref to capture function so countdown closure always gets latest version
   const captureRef = useRef<() => void>(() => {});
 
-  const autoCapture = mode === "full-body";
+  const autoCapture = mode === "full-body" || mode === "chest-front" || mode === "chest-side";
 
   // ── Load MediaPipe ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -198,9 +198,9 @@ export default function CameraView({
           if (faceFrameBuffer.current.length > MAX_BUFFER) faceFrameBuffer.current.shift();
         } else {
           const raw =
-            mode === "upper-body"
-              ? extractUpperBodyMeasurements(result.landmarks, liveW, liveH)
-              : extractRawMeasurements(result.landmarks, liveW, liveH);
+            mode === "full-body"
+              ? extractRawMeasurements(result.landmarks, liveW, liveH)
+              : extractUpperBodyMeasurements(result.landmarks, liveW, liveH);
           rawFrameBuffer.current.push(raw);
           if (rawFrameBuffer.current.length > MAX_BUFFER) rawFrameBuffer.current.shift();
         }
@@ -247,7 +247,14 @@ export default function CameraView({
       const frames = rawFrameBuffer.current.slice(-requiredGoodFrames);
       if (frames.length === 0) { setIsCapturing(false); return; }
       const avg = averageRawMeasurements(frames);
-      const m = scaleMeasurements(avg, userHeightCm, mode);
+      // Chest poses use upper-body scaling; map internal modes to a real ScanMode
+      const scaleMode =
+        mode === "chest-front" || mode === "chest-side" || mode === "upper-body"
+          ? "upper-body"
+          : mode === "full-body"
+          ? "full-body"
+          : "full-body";
+      const m = scaleMeasurements(avg, userHeightCm, scaleMode);
       onCapture(m);
     }
   }, [isCapturing, mode, requiredGoodFrames, userHeightCm, onCapture]);
@@ -359,7 +366,8 @@ export default function CameraView({
           <div className="absolute top-3 left-3 right-3 text-center pointer-events-none">
             <p className="text-white/70 text-xs bg-black/40 rounded-lg px-3 py-1.5 inline-block">
               {mode === "face" && "Arm's length away · Look straight · Even lighting"}
-              {mode === "upper-body" && "~1 m away · Upper body fully visible"}
+              {(mode === "upper-body" || mode === "chest-front") && "~1 m away · Face forward · Upper body visible"}
+              {mode === "chest-side" && "~1 m away · Turn 90° · Side profile"}
               {mode === "full-body" && "2–3 m away · Full body visible · Arms at sides"}
             </p>
           </div>
